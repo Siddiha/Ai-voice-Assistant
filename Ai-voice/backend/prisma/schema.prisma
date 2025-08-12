@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String              @id @default(cuid())
+  email             String              @unique
+  name              String
+  googleAccessToken String?
+  googleRefreshToken String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  // Relationships
+  conversations     Conversation[]
+  scheduledEmails   ScheduledEmail[]
+  userPreferences   UserPreferences?
+  
+  @@map("users")
+}
+
+model UserPreferences {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  timezone        String   @default("UTC")
+  workingHours    Json     // { start: 9, end: 17 }
+  defaultDuration Int      @default(60) // minutes
+  emailSignature  String?
+  voiceSettings   Json?    // { language: "en", speed: 1.0 }
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_preferences")
+}
+
+model Conversation {
+  id        String              @id @default(cuid())
+  userId    String
+  sessionId String
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+  
+  // Relationships
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ConversationMessage[]
+  
+  @@unique([userId, sessionId])
+  @@map("conversations")
+}
+
+model ConversationMessage {
+  id             String       @id @default(cuid())
+  conversationId String
+  role           MessageRole
+  content        String
+  timestamp      DateTime     @default(now())
+  metadata       Json?        // Additional data like intent, confidence, etc.
+  
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  @@map("conversation_messages")
+}
+
+model ScheduledEmail {
+  id          String           @id @default(cuid())
+  userId      String
+  recipients  String[]
+  subject     String
+  body        String
+  htmlBody    String?
+  sendAt      DateTime
+  status      EmailStatus      @default(PENDING)
+  attempts    Int              @default(0)
+  lastError   String?
+  createdAt   DateTime         @default(now())
+  sentAt      DateTime?
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("scheduled_emails")
+}
+
+model CalendarSync {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  googleCalendarId  String?
+  lastSyncAt        DateTime?
+  syncEnabled       Boolean   @default(true)
+  syncToken         String?
+  
+  @@map("calendar_sync")
+}
+
+model VoiceSession {
+  id           String          @id @default(cuid())
+  userId       String
+  audioUrl     String?
+  transcription String?
+  intent       Json?           // { action, confidence, parameters }
+  response     String?
+  duration     Int?            // seconds
+  status       VoiceStatus     @default(PROCESSING)
+  createdAt    DateTime        @default(now())
+  
+  @@map("voice_sessions")
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum EmailStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum VoiceStatus {
+  RECORDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}

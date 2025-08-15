@@ -1,237 +1,277 @@
-# AI Voice Assistant - Setup Guide
+# AI Voice Assistant
 
-## 🚀 Quick Start
+A comprehensive AI-powered voice assistant that helps you manage your calendar, emails, and tasks through natural voice commands. Built with React Native (Expo) for the frontend and Node.js/Express for the backend.
 
-### Step 1: Project Setup
+## Features
 
-```bash
-# Create project directory
-mkdir ai-voice-assistant
-cd ai-voice-assistant
+### 🎤 Voice Commands
 
-# Create backend directory
-mkdir backend
-cd backend
+- Natural language processing for calendar and email management
+- Voice-to-text transcription using OpenAI Whisper
+- Text-to-speech responses for hands-free interaction
+- Support for complex multi-step commands
 
-# Copy the server.js code into this directory
-# Copy the package.json code into this directory
+### 📅 Calendar Management
 
-# Install dependencies
-npm install
+- View today's and upcoming events
+- Create new calendar events with voice commands
+- Schedule meetings with attendees
+- Set reminders and notifications
+- Integration with Google Calendar
 
-# Create environment file
-cp .env.example .env
-# Edit .env with your API keys (see API Setup section)
-```
+### 📧 Email Management
 
-### Step 2: Frontend Setup
+- Read recent emails aloud
+- Compose and send emails using voice
+- Search through email history
+- Mark emails as read/unread
+- Integration with Gmail
 
-```bash
-# Go back to main project directory
-cd ..
+### 🔐 Authentication
 
-# Create frontend directory
-mkdir frontend
-cd frontend
+- Secure Google OAuth integration
+- JWT token-based authentication
+- Automatic token refresh
+- Secure storage of credentials
 
-# Copy the HTML file as index.html
-# The frontend is a single HTML file with embedded CSS and JavaScript
-```
+### 🎨 Modern UI
 
-### Step 3: Run the Application
+- Beautiful gradient design
+- Intuitive chat interface
+- Real-time message updates
+- Responsive layout for all devices
+- Dark mode support
 
-```bash
-# Terminal 1: Start the backend server
-cd backend
-npm run dev
+## Tech Stack
 
-# Terminal 2: Serve the frontend (simple HTTP server)
-cd frontend
-# Option 1: Use Python
-python -m http.server 8080
+### Frontend
 
-# Option 2: Use Node.js http-server
-npx http-server -p 8080
+- **React Native** with Expo
+- **TypeScript** for type safety
+- **Expo AV** for audio recording and playback
+- **Expo Speech** for text-to-speech
+- **AsyncStorage** for local data persistence
+- **Linear Gradient** for beautiful UI effects
 
-# Option 3: Use VS Code Live Server extension
-```
+### Backend
 
-### Step 4: Access the Application
+- **Node.js** with Express
+- **TypeScript** for type safety
+- **MongoDB** with Mongoose for data storage
+- **Google APIs** for Calendar and Gmail integration
+- **OpenAI API** for natural language processing
+- **JWT** for authentication
+- **Multer** for file uploads
 
-- Frontend: http://localhost:8080
-- Backend API: http://localhost:3000
-- Health Check: http://localhost:3000/api/health
+### APIs & Services
 
-## 🔑 API Setup (Optional but Recommended)
+- **Google Calendar API** - Calendar management
+- **Gmail API** - Email management
+- **OpenAI Whisper** - Speech-to-text
+- **OpenAI GPT** - Natural language understanding
+- **Google OAuth** - Authentication
 
-### OpenAI API Key
-
-1. Go to https://platform.openai.com/api-keys
-2. Create an account and get your API key
-3. Add to `.env`: `OPENAI_API_KEY=your_key_here`
-
-### Gmail API Setup (for real email integration)
-
-1. Go to https://console.cloud.google.com/
-2. Create a new project
-3. Enable Gmail API
-4. Create credentials (OAuth 2.0)
-5. Add to `.env`:
-   ```
-   GMAIL_CLIENT_ID=your_client_id
-   GMAIL_CLIENT_SECRET=your_client_secret
-   ```
-
-### Google Calendar API
-
-- Uses the same credentials as Gmail API
-- Enable Google Calendar API in the same Google Cloud project
-
-## 📁 Project Structure
+## Project Structure
 
 ```
-ai-voice-assistant/
+Ai-voice-Assistant/
 ├── backend/
-│   ├── server.js          # Main server file
-│   ├── package.json       # Dependencies
-│   ├── .env              # Environment variables
-│   └── .env.example      # Environment template
-└── frontend/
-    └── index.html        # Main HTML file with embedded JS/CSS
+│   ├── src/
+│   │   ├── models/
+│   │   │   └── User.ts
+│   │   ├── services/
+│   │   │   ├── authService.ts
+│   │   │   ├── calendarService.ts
+│   │   │   ├── emailService.ts
+│   │   │   └── openaiService.ts
+│   │   ├── routes/
+│   │   │   ├── auth.ts
+│   │   │   └── index.ts
+│   │   ├── middleware/
+│   │   │   └── auth.ts
+│   │   └── server.ts
+│   ├── package.json
+│   └── tsconfig.json
+├── frontend/
+│   ├── src/
+│   │   └── components/
+│   │       └── VoiceCalendarApp.tsx
+│   ├── App.tsx
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── app.json
+└── README.md
 ```
 
-## 🎯 Current Features
+## Installation & Setup
 
-### ✅ Working Now:
+### Prerequisites
 
-- Voice recognition (speech-to-text)
-- Text-to-speech responses
-- Basic conversation handling
-- Simulated email/calendar/task responses
-- Modern, responsive UI
-- Error handling
+- Node.js (v16 or higher)
+- npm or yarn
+- MongoDB (local or cloud)
+- Google Cloud Console account
+- OpenAI API key
 
-### 🔄 Next Phase - Real Integrations:
+### Backend Setup
 
-- OpenAI API integration for smarter responses
-- Gmail API for real email management
-- Google Calendar API for calendar integration
-- Task management API integration
+1. **Navigate to backend directory:**
 
-## 🧪 Testing the Voice Assistant
+   ```bash
+   cd Ai-voice-Assistant/backend
+   ```
 
-Try these voice commands:
+2. **Install dependencies:**
 
-- "Hello" or "Hi"
-- "What are my recent emails?"
-- "What's on my calendar today?"
-- "Add a task to review the project proposal"
-- "Draft an email to John about the meeting"
-- "Help me"
+   ```bash
+   npm install
+   ```
 
-## 🔧 Development Tips
+3. **Set up environment variables:**
+   Create a `.env` file in the backend directory:
 
-### Browser Compatibility
+   ```env
+   PORT=3000
+   MONGODB_URI=your_mongodb_connection_string
+   JWT_SECRET=your_jwt_secret_key
+   GOOGLE_CLIENT_ID=your_google_client_id
+   GOOGLE_CLIENT_SECRET=your_google_client_secret
+   GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
+   OPENAI_API_KEY=your_openai_api_key
+   FRONTEND_URL=http://localhost:19006
+   ```
 
-- **Best**: Chrome, Edge (full Web Speech API support)
-- **Limited**: Firefox, Safari (may have speech issues)
+4. **Build and start the server:**
+   ```bash
+   npm run build
+   npm start
+   ```
 
-### Voice Recognition Tips
+### Frontend Setup
 
-- Speak clearly and at normal pace
-- Use a good quality microphone
-- Minimize background noise
-- Allow microphone permissions when prompted
+1. **Navigate to frontend directory:**
 
-### Debugging
+   ```bash
+   cd Ai-voice-Assistant/frontend
+   ```
 
-- Open browser DevTools (F12) to see console logs
-- Check Network tab for API calls
-- Backend logs show in terminal
+2. **Install dependencies:**
 
-## 🚀 Next Development Phases
+   ```bash
+   npm install
+   ```
 
-### Phase 1: Enhanced AI (Week 1)
+3. **Start the development server:**
 
-```javascript
-// Add to server.js for better AI responses
-const improvedAI = {
-  contextAware: true,
-  personalizedResponses: true,
-  intentRecognition: true,
-};
-```
+   ```bash
+   npm start
+   ```
 
-### Phase 2: Real Email Integration (Week 2)
+4. **Run on device/simulator:**
+   - Press `a` for Android
+   - Press `i` for iOS
+   - Press `w` for web
 
-```javascript
-// Gmail API integration
-const gmail = google.gmail({ version: "v1", auth: oauth2Client });
-```
+## Google Cloud Setup
 
-### Phase 3: Calendar Integration (Week 3)
+1. **Create a Google Cloud Project:**
 
-```javascript
-// Google Calendar API integration
-const calendar = google.calendar({ version: "v3", auth: oauth2Client });
-```
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select existing one
 
-### Phase 4: Advanced Features (Week 4)
+2. **Enable APIs:**
 
-- Voice training for better recognition
-- Multiple user support
-- Mobile responsive improvements
-- Offline mode capabilities
+   - Google Calendar API
+   - Gmail API
+   - Google+ API
 
-## 🎓 Learning Outcomes
+3. **Create OAuth 2.0 Credentials:**
 
-This project teaches you:
+   - Go to "Credentials" section
+   - Create OAuth 2.0 Client ID
+   - Add authorized redirect URIs
+   - Download the client configuration
 
-- **Frontend**: HTML5 Speech APIs, Modern CSS, Vanilla JavaScript
-- **Backend**: Node.js, Express.js, REST APIs, OAuth
-- **Integration**: External APIs (OpenAI, Google APIs)
-- **Architecture**: Client-server communication, async programming
-- **DevOps**: Environment configuration, API key management
+4. **Update environment variables:**
+   - Add your Google Client ID and Secret to the backend `.env` file
 
-## 🆘 Troubleshooting
+## Usage Examples
 
-### Common Issues:
+### Voice Commands
 
-**1. Microphone not working**
+**Calendar Management:**
 
-- Check browser permissions
-- Use Chrome/Edge for best support
-- Ensure HTTPS in production
+- "What meetings do I have today?"
+- "Schedule a meeting with John tomorrow at 2 PM"
+- "Create an event called 'Team Lunch' on Friday at noon"
+- "What's on my calendar this week?"
 
-**2. Backend not connecting**
+**Email Management:**
 
-- Check if server is running on port 3000
-- Verify CORS is enabled
-- Check frontend API URL in JavaScript
+- "Read my recent emails"
+- "Send an email to john@example.com about the project update"
+- "Search for emails from Sarah"
+- "Mark the latest email as read"
 
-**3. Voice recognition not accurate**
+**General Commands:**
 
-- Speak more clearly
-- Check microphone quality
-- Try different browser
-- Adjust speech rate in code
+- "What's the weather like?"
+- "Set a reminder for tomorrow"
+- "What time is my next meeting?"
 
-**4. API errors**
+## API Endpoints
 
-- Check .env file configuration
-- Verify API keys are valid
-- Check network connectivity
-- Review server logs
+### Authentication
 
-## 📚 Additional Resources
+- `GET /api/auth/google` - Get Google OAuth URL
+- `POST /api/auth/google/callback` - Handle OAuth callback
+- `GET /api/auth/verify` - Verify JWT token
 
-- Web Speech API Documentation: https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API
-- OpenAI API Documentation: https://platform.openai.com/docs
-- Gmail API Guide: https://developers.google.com/gmail/api/guides
-- Google Calendar API Guide: https://developers.google.com/calendar/api/guides/overview
+### Voice Processing
 
-## 🎉 You're Ready to Start!
+- `POST /api/voice/process` - Process voice input
+- `POST /api/chat` - Process text input
 
-Your AI voice assistant foundation is complete! Start with the basic version and gradually add more advanced features. This is a great project for your CS portfolio that demonstrates full-stack development, API integration, and modern web technologies.
+### Calendar
 
-Good luck with your second-year project! 🚀
+- `GET /api/calendar/events` - Get calendar events
+- `POST /api/calendar/events` - Create new event
+- `PUT /api/calendar/events/:id` - Update event
+- `DELETE /api/calendar/events/:id` - Delete event
+
+### Email
+
+- `GET /api/email/messages` - Get recent emails
+- `POST /api/email/send` - Send email
+- `PUT /api/email/messages/:id/read` - Mark email as read
+
+### Dashboard
+
+- `GET /api/dashboard` - Get dashboard data
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Support
+
+For support and questions, please open an issue on GitHub or contact the development team.
+
+## Roadmap
+
+- [ ] Add support for multiple calendar providers
+- [ ] Implement email templates
+- [ ] Add task management features
+- [ ] Support for multiple languages
+- [ ] Offline mode capabilities
+- [ ] Advanced voice recognition
+- [ ] Integration with smart home devices
+- [ ] Team collaboration features

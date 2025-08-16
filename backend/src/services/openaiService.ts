@@ -1,27 +1,16 @@
 import OpenAI from "openai";
 import fs from "fs";
+import path from "path";
 
-interface UserContext {
-  recentEvents?: any[];
-  recentEmails?: any[];
-  todayEvents?: any[];
-  weekEvents?: any[];
-  userInfo?: any;
-  currentTime?: string;
-  timezone?: string;
+interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
 }
 
-interface AIResponse {
-  response: string;
-  action?: {
-    type: string;
-    data?: any;
-    eventId?: string;
-    query?: string;
-    date?: string;
-    duration?: number;
-    limit?: number;
-  };
+interface ActionIntent {
+  type: "calendar" | "email" | "general";
+  action: string;
+  parameters: any;
   confidence: number;
 }
 
@@ -34,212 +23,155 @@ export class OpenAIService {
     });
   }
 
-  // Convert speech to text
-  async speechToText(audioFilePath: string): Promise<string | null> {
+  // Transcribe audio to text using OpenAI Whisper
+  async transcribeAudio(audioFilePath: string): Promise<string> {
     try {
-      const audioFile = fs.createReadStream(audioFilePath);
-
-      const response = await this.openai.audio.transcriptions.create({
-        file: audioFile,
+      const transcription = await this.openai.audio.transcriptions.create({
+        file: fs.createReadStream(audioFilePath),
         model: "whisper-1",
         language: "en",
         response_format: "text",
       });
 
-      // Clean up uploaded file
-      fs.unlinkSync(audioFilePath);
-
-      return response || null;
+      return transcription as string;
     } catch (error) {
-      console.error("Speech to text error:", error);
-      // Clean up uploaded file even on error
-      if (fs.existsSync(audioFilePath)) {
-        fs.unlinkSync(audioFilePath);
-      }
-      throw new Error("Failed to convert speech to text");
+      console.error("Audio transcription error:", error);
+      throw new Error("Failed to transcribe audio");
     }
   }
 
-  // Process user input with comprehensive context
-  async processUserInput(
-    input: string,
-    userId: string,
-    context: UserContext
-  ): Promise<AIResponse> {
+  // Process text input and generate response
+  async processTextInput(
+    message: string,
+    userContext: any,
+    conversationHistory: ChatMessage[]
+  ): Promise<{
+    response: string;
+    action?: ActionIntent;
+    shouldRefreshData: boolean;
+  }> {
     try {
-      const systemPrompt = this.buildSystemPrompt(context);
-      const userPrompt = this.buildUserPrompt(input, context);
+      // Create system prompt with context
+      const systemPrompt = this.createSystemPrompt(userContext);
 
-      const response = await this.openai.chat.completions.create({
+      // Prepare messages for OpenAI
+      const messages: ChatMessage[] = [
+        { role: "system", content: systemPrompt },
+        ...conversationHistory.slice(-10), // Keep last 10 messages for context
+        { role: "user", content: message },
+      ];
+
+      const completion = await this.openai.chat.completions.create({
         model: "gpt-4",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
+        messages,
+        max_tokens: 500,
+        temperature: 0.7,
         functions: this.getFunctionDefinitions(),
         function_call: "auto",
-        temperature: 0.3, // Lower temperature for more consistent responses
-        max_tokens: 1000,
       });
 
-      const message = response.choices[0].message;
+      const response = completion.choices[0].message;
 
-      // Check if AI wants to call a function
-      if (message.function_call) {
-        const functionName = message.function_call.name;
-        const functionArgs = JSON.parse(
-          message.function_call.arguments || "{}"
-        );
+      // Check if function was called
+      if (response.function_call) {
+        const functionCall = response.function_call;
+        const parsedArgs = JSON.parse(functionCall.arguments);
 
         return {
-          response: this.generateActionResponse(functionName, functionArgs),
-          action: this.mapFunctionToAction(functionName, functionArgs),
-          confidence: 0.9,
+          response: response.content || "I'll help you with that.",
+          action: {
+            type: parsedArgs.type || "general",
+            action: functionCall.name,
+            parameters: parsedArgs,
+            confidence: 0.9,
+          },
+          shouldRefreshData: this.shouldRefreshData(functionCall.name),
         };
       }
 
       return {
-        response:
-          message.content || "I'm sorry, I couldn't process that request.",
-        confidence: 0.8,
+        response: response.content || "I'm sorry, I didn't understand that.",
+        shouldRefreshData: false,
       };
     } catch (error) {
-      console.error("OpenAI processing error:", error);
-      return {
-        response:
-          "I'm sorry, I encountered an error processing your request. Please try again.",
-        confidence: 0.1,
-      };
+      console.error("Text processing error:", error);
+      throw new Error("Failed to process text input");
     }
   }
 
-  // Build comprehensive system prompt
-  private buildSystemPrompt(context: UserContext): string {
-    const currentTime = context.currentTime
-      ? new Date(context.currentTime)
-      : new Date();
-    const timeString = currentTime.toLocaleString("en-US", {
-      timeZone: context.timezone || "UTC",
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  // Create system prompt with user context
+  private createSystemPrompt(userContext: any): string {
+    return `You are an AI voice assistant that helps users manage their calendar and emails. 
 
-    return `You are an intelligent personal assistant specializing in calendar and email management.
-
-Current Context:
-- Current time: ${timeString}
-- Timezone: ${context.timezone || "UTC"}
-- User: ${context.userInfo?.name || "User"} (${
-      context.userInfo?.email || "No email"
-    })
-
-Calendar Information:
-- Today's events: ${context.todayEvents?.length || 0}
-- This week's events: ${context.weekEvents?.length || 0}
-- Recent events loaded: ${context.recentEvents?.length || 0}
-
-Email Information:
-- Recent emails loaded: ${context.recentEmails?.length || 0}
+User Context:
+- Name: ${userContext.name || "User"}
+- Email: ${userContext.email || "user@example.com"}
+- Timezone: ${userContext.timezone || "UTC"}
 
 Your capabilities:
-1. Calendar Management:
-   - View calendar events for any date range
-   - Create, update, and delete events
-   - Check availability for scheduling
-   - Find free time slots
-   - Reschedule meetings
+1. Calendar Management: View, create, update, and delete calendar events
+2. Email Management: Read, compose, and send emails
+3. General Assistance: Answer questions, provide information
 
-2. Email Management:
-   - Read and search through emails
-   - Send emails with proper formatting
-   - Summarize email content
-   - Find specific emails by sender, subject, or content
+Guidelines:
+- Be helpful, concise, and natural in your responses
+- When users ask about calendar/email actions, use the appropriate functions
+- Always confirm actions before executing them
+- Provide clear, actionable responses
+- If you're unsure about an action, ask for clarification
 
-Instructions:
-- Always be specific about dates and times
-- When scheduling, consider the user's existing events to avoid conflicts
-- For email searches, use relevant keywords from the user's request
-- Provide helpful, accurate responses based on the actual data available
-- If you need to perform an action, use the appropriate function
-- Be conversational but professional
-- Always confirm important actions like deleting events or sending emails
-
-Current Data Context:
-${this.formatContextData(context)}`;
+Current time: ${new Date().toISOString()}`;
   }
 
-  // Build user prompt with context
-  private buildUserPrompt(input: string, context: UserContext): string {
-    return `User Request: "${input}"
-
-Please help the user with their request. Use the available context and functions to provide accurate assistance.`;
-  }
-
-  // Format context data for the AI
-  private formatContextData(context: UserContext): string {
-    let contextStr = "";
-
-    if (context.todayEvents && context.todayEvents.length > 0) {
-      contextStr += "\nToday's Events:\n";
-      context.todayEvents.forEach((event, index) => {
-        const startTime = new Date(event.startDate).toLocaleTimeString(
-          "en-US",
-          {
-            hour: "2-digit",
-            minute: "2-digit",
-          }
-        );
-        contextStr += `${index + 1}. ${event.title} at ${startTime}\n`;
-      });
-    }
-
-    if (context.weekEvents && context.weekEvents.length > 0) {
-      contextStr += "\nThis Week's Upcoming Events:\n";
-      context.weekEvents.slice(0, 10).forEach((event, index) => {
-        const eventDate = new Date(event.startDate);
-        const dateStr = eventDate.toLocaleDateString("en-US", {
-          weekday: "short",
-          month: "short",
-          day: "numeric",
-        });
-        const timeStr = eventDate.toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-        contextStr += `${index + 1}. ${
-          event.title
-        } - ${dateStr} at ${timeStr}\n`;
-      });
-    }
-
-    if (context.recentEmails && context.recentEmails.length > 0) {
-      contextStr += "\nRecent Emails:\n";
-      context.recentEmails.slice(0, 5).forEach((email, index) => {
-        const emailDate = new Date(email.date).toLocaleDateString("en-US");
-        contextStr += `${index + 1}. From: ${email.from} - Subject: ${
-          email.subject
-        } (${emailDate})\n`;
-      });
-    }
-
-    return contextStr || "No specific context data available.";
-  }
-
-  // Define functions for OpenAI to call
+  // Define available functions for the AI
   private getFunctionDefinitions() {
     return [
+      {
+        name: "get_calendar_events",
+        description: "Get calendar events for a specific date range",
+        parameters: {
+          type: "object",
+          properties: {
+            type: {
+              type: "string",
+              enum: ["calendar"],
+              description: "Type of action",
+            },
+            startDate: {
+              type: "string",
+              description: "Start date in ISO format (YYYY-MM-DD)",
+            },
+            endDate: {
+              type: "string",
+              description: "End date in ISO format (YYYY-MM-DD)",
+            },
+            query: {
+              type: "string",
+              description: "Search query for events",
+            },
+          },
+          required: ["type"],
+        },
+      },
       {
         name: "create_calendar_event",
         description: "Create a new calendar event",
         parameters: {
           type: "object",
           properties: {
-            title: { type: "string", description: "Event title" },
-            description: { type: "string", description: "Event description" },
+            type: {
+              type: "string",
+              enum: ["calendar"],
+              description: "Type of action",
+            },
+            title: {
+              type: "string",
+              description: "Event title",
+            },
+            description: {
+              type: "string",
+              description: "Event description",
+            },
             startDate: {
               type: "string",
               description: "Start date and time in ISO format",
@@ -250,93 +182,44 @@ Please help the user with their request. Use the available context and functions
             },
             attendees: {
               type: "array",
-              items: { type: "string" },
-              description: "Email addresses of attendees",
+              items: {
+                type: "string",
+              },
+              description: "List of attendee email addresses",
             },
-            location: { type: "string", description: "Event location" },
+            location: {
+              type: "string",
+              description: "Event location",
+            },
           },
-          required: ["title", "startDate", "endDate"],
+          required: ["type", "title", "startDate"],
         },
       },
       {
-        name: "update_calendar_event",
-        description: "Update an existing calendar event",
+        name: "get_emails",
+        description: "Get recent emails",
         parameters: {
           type: "object",
           properties: {
-            eventId: {
+            type: {
               type: "string",
-              description: "ID of the event to update",
+              enum: ["email"],
+              description: "Type of action",
             },
-            title: { type: "string", description: "New event title" },
-            description: {
-              type: "string",
-              description: "New event description",
-            },
-            startDate: {
-              type: "string",
-              description: "New start date and time in ISO format",
-            },
-            endDate: {
-              type: "string",
-              description: "New end date and time in ISO format",
-            },
-            attendees: {
-              type: "array",
-              items: { type: "string" },
-              description: "Email addresses of attendees",
-            },
-            location: { type: "string", description: "Event location" },
-          },
-          required: ["eventId"],
-        },
-      },
-      {
-        name: "delete_calendar_event",
-        description: "Delete a calendar event",
-        parameters: {
-          type: "object",
-          properties: {
-            eventId: {
-              type: "string",
-              description: "ID of the event to delete",
-            },
-          },
-          required: ["eventId"],
-        },
-      },
-      {
-        name: "check_availability",
-        description: "Check availability for a specific date and duration",
-        parameters: {
-          type: "object",
-          properties: {
-            date: {
-              type: "string",
-              description: "Date to check in ISO format",
-            },
-            duration: { type: "number", description: "Duration in minutes" },
-          },
-          required: ["date", "duration"],
-        },
-      },
-      {
-        name: "search_emails",
-        description: "Search through emails",
-        parameters: {
-          type: "object",
-          properties: {
             query: {
               type: "string",
-              description:
-                "Search query (can include sender, subject, keywords)",
+              description: "Search query for emails",
             },
-            limit: {
+            maxResults: {
               type: "number",
-              description: "Number of emails to return (default 10)",
+              description: "Maximum number of emails to return",
+            },
+            unreadOnly: {
+              type: "boolean",
+              description: "Only return unread emails",
             },
           },
-          required: ["query"],
+          required: ["type"],
         },
       },
       {
@@ -345,87 +228,157 @@ Please help the user with their request. Use the available context and functions
         parameters: {
           type: "object",
           properties: {
+            type: {
+              type: "string",
+              enum: ["email"],
+              description: "Type of action",
+            },
             to: {
               type: "array",
-              items: { type: "string" },
+              items: {
+                type: "string",
+              },
               description: "Recipient email addresses",
             },
-            subject: { type: "string", description: "Email subject" },
-            body: { type: "string", description: "Email body content" },
+            subject: {
+              type: "string",
+              description: "Email subject",
+            },
+            body: {
+              type: "string",
+              description: "Email body",
+            },
             cc: {
               type: "array",
-              items: { type: "string" },
-              description: "CC email addresses",
+              items: {
+                type: "string",
+              },
+              description: "CC recipient email addresses",
+            },
+            bcc: {
+              type: "array",
+              items: {
+                type: "string",
+              },
+              description: "BCC recipient email addresses",
             },
           },
-          required: ["to", "subject", "body"],
+          required: ["type", "to", "subject", "body"],
+        },
+      },
+      {
+        name: "general_response",
+        description: "Provide a general response without specific actions",
+        parameters: {
+          type: "object",
+          properties: {
+            type: {
+              type: "string",
+              enum: ["general"],
+              description: "Type of action",
+            },
+            message: {
+              type: "string",
+              description: "Response message to user",
+            },
+          },
+          required: ["type", "message"],
         },
       },
     ];
   }
 
-  // Generate appropriate response for actions
-  private generateActionResponse(functionName: string, args: any): string {
-    switch (functionName) {
-      case "create_calendar_event":
-        return `I'll create a new event "${args.title}" for ${new Date(
-          args.startDate
-        ).toLocaleString()}.`;
-      case "update_calendar_event":
-        return `I'll update the calendar event with the new information.`;
-      case "delete_calendar_event":
-        return `I'll delete that calendar event for you.`;
-      case "check_availability":
-        return `Let me check your availability for ${new Date(
-          args.date
-        ).toLocaleDateString()}.`;
-      case "search_emails":
-        return `I'll search your emails for "${args.query}".`;
-      case "send_email":
-        return `I'll send that email to ${args.to.join(", ")}.`;
-      default:
-        return `I'll help you with that request.`;
+  // Determine if data should be refreshed after an action
+  private shouldRefreshData(actionName: string): boolean {
+    const refreshActions = [
+      "create_calendar_event",
+      "update_calendar_event",
+      "delete_calendar_event",
+      "send_email",
+      "mark_email_read",
+    ];
+
+    return refreshActions.includes(actionName);
+  }
+
+  // Generate a natural language response for actions
+  async generateActionResponse(
+    action: ActionIntent,
+    result: any
+  ): Promise<string> {
+    try {
+      const messages: ChatMessage[] = [
+        {
+          role: "system",
+          content:
+            "Generate a natural, conversational response confirming the action was completed successfully. Be brief and helpful.",
+        },
+        {
+          role: "user",
+          content: `Action: ${action.action}, Parameters: ${JSON.stringify(
+            action.parameters
+          )}, Result: ${JSON.stringify(result)}`,
+        },
+      ];
+
+      const completion = await this.openai.chat.completions.create({
+        model: "gpt-4",
+        messages,
+        max_tokens: 150,
+        temperature: 0.7,
+      });
+
+      return (
+        completion.choices[0].message.content ||
+        "Action completed successfully."
+      );
+    } catch (error) {
+      console.error("Response generation error:", error);
+      return "Action completed successfully.";
     }
   }
 
-  // Map OpenAI function calls to our action format
-  private mapFunctionToAction(functionName: string, args: any): any {
-    switch (functionName) {
-      case "create_calendar_event":
-        return {
-          type: "calendar_create",
-          data: args,
-        };
-      case "update_calendar_event":
-        return {
-          type: "calendar_update",
-          eventId: args.eventId,
-          data: args,
-        };
-      case "delete_calendar_event":
-        return {
-          type: "calendar_delete",
-          eventId: args.eventId,
-        };
-      case "check_availability":
-        return {
-          type: "calendar_check_availability",
-          date: args.date,
-          duration: args.duration,
-        };
-      case "search_emails":
-        return {
-          type: "email_search",
-          query: args.query,
-          limit: args.limit || 10,
-        };
-      case "send_email":
-        return {
-          type: "email_send",
-          data: args,
-        };
-      default:
-        return null;
+  // Extract entities from user input
+  async extractEntities(text: string): Promise<{
+    dates: string[];
+    times: string[];
+    people: string[];
+    locations: string[];
+  }> {
+    try {
+      const messages: ChatMessage[] = [
+        {
+          role: "system",
+          content:
+            "Extract entities from the user input. Return only a JSON object with arrays of dates, times, people (names/emails), and locations.",
+        },
+        {
+          role: "user",
+          content: text,
+        },
+      ];
+
+      const completion = await this.openai.chat.completions.create({
+        model: "gpt-4",
+        messages,
+        max_tokens: 200,
+        temperature: 0.1,
+      });
+
+      const response = completion.choices[0].message.content;
+      if (response) {
+        try {
+          return JSON.parse(response);
+        } catch {
+          // Fallback if JSON parsing fails
+          return { dates: [], times: [], people: [], locations: [] };
+        }
+      }
+
+      return { dates: [], times: [], people: [], locations: [] };
+    } catch (error) {
+      console.error("Entity extraction error:", error);
+      return { dates: [], times: [], people: [], locations: [] };
     }
   }
 }

@@ -30,6 +30,7 @@
             backdrop-filter: blur(10px);
         }
 
+
         .header {
             text-align: center;
             margin-bottom: 2rem;
@@ -291,11 +292,11 @@
                 this.micButton.classList.remove('listening');
                 this.status.textContent = 'Click the microphone to start';
                 this.status.classList.remove('listening', 'processing');
-                
                 if (this.recognition) {
                     this.recognition.stop();
                 }
             }
+
 
             async processVoiceCommand(command) {
                 this.status.textContent = 'Processing your request...';
